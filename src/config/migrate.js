@@ -1,5 +1,11 @@
 const { pool } = require('./database');
 
+console.log("🛠️  Migration starting...");
+console.log("🌐 NODE_ENV:", process.env.NODE_ENV);
+console.log("🔗 DATABASE_URL:", 
+  process.env.DATABASE_URL?.replace(/:[^:@]+@/, ':****@'));
+console.log("🕒 Current time:", new Date().toISOString());
+
 const createTables = async () => {
     let client;
     
