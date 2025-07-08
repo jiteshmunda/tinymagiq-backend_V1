@@ -1,26 +1,26 @@
 const { Pool } = require('pg');
-const fs = require('fs');
-const path = require('path');
+// const fs = require('fs'); // No longer needed for reading CA from file
+// const path = require('path'); // No longer needed for file path resolution
 require('dotenv').config();
 
 // Determine if we need to use SSL with CA certificate
+// This condition is still good for local dev vs. production environment logic
 const useSSLWithCA = process.env.NODE_ENV === 'production' || process.env.DB_USE_SSL_CA === 'true';
 
 let sslConfig = false;
 if (useSSLWithCA) {
-    try {
-        // Read CA certificate from root of project
-        const caPath = path.resolve(process.cwd(), 'ca-certificate.crt');
-        const caCert = fs.readFileSync(caPath).toString();
-        
-        sslConfig = {
-            rejectUnauthorized: true,  // Enables certificate validation
-            ca: caCert                 // DigitalOcean's CA certificate
-        };
-    } catch (error) {
-        console.error('❌ Failed to read CA certificate:', error.message);
-        throw new Error('CA certificate is required for SSL connection');
+    // In App Platform, we get the CA certificate content directly from an environment variable
+    const caCert = process.env.DB_CA_CERT; // Get the CA certificate content from env var
+
+    if (!caCert) {
+        console.error('❌ DB_CA_CERT environment variable is not set!');
+        throw new Error('DB_CA_CERT environment variable is required for SSL connection in production/SSL CA mode.');
     }
+
+    sslConfig = {
+        rejectUnauthorized: true,  // Enables certificate validation
+        ca: caCert                 // DigitalOcean's CA certificate
+    };
 }
 
 // Create connection pool
