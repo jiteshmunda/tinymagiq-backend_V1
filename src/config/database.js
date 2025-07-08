@@ -1,43 +1,49 @@
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
+
+// Determine if we need to use SSL with CA certificate
+const useSSLWithCA = process.env.NODE_ENV === 'production' || process.env.DB_USE_SSL_CA === 'true';
+
+let sslConfig = false;
+if (useSSLWithCA) {
+    try {
+        // Read CA certificate from root of project
+        const caPath = path.resolve(process.cwd(), 'ca-certificate.crt');
+        const caCert = fs.readFileSync(caPath).toString();
+        
+        sslConfig = {
+            rejectUnauthorized: true,  // Enables certificate validation
+            ca: caCert                 // DigitalOcean's CA certificate
+        };
+    } catch (error) {
+        console.error('❌ Failed to read CA certificate:', error.message);
+        throw new Error('CA certificate is required for SSL connection');
+    }
+}
 
 // Create connection pool
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { 
-        rejectUnauthorized: false 
-    } : false,
-    max: 200,
+    ssl: sslConfig,  // Use SSL config based on environment
+    max: 100,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
+    connectionTimeoutMillis: 5000,
 });
 
 // Test connection function
 const testConnection = async () => {
-    let client;
-    const maxAttempts = 5;
-    const delay = 5000; // 5 seconds between retries
-  
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        console.log(`🔌 Testing database connection (attempt ${attempt}/${maxAttempts})...`);
-        client = await pool.connect();
-        const result = await client.query('SELECT NOW() as current_time');
-        console.log('✅ Database connection successful!');
-        console.log(`⏰ Current time: ${result.rows[0].current_time}`);
+    try {
+        const client = await pool.connect();
+        console.log('✅ Database connected successfully');
+        client.release();
         return true;
-      } catch (error) {
-        console.error(`❌ Connection attempt ${attempt} failed: ${error.message}`);
-        if (attempt < maxAttempts) {
-          console.log(`⌛ Retrying in ${delay/1000} seconds...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      } finally {
-        if (client) client.release();
-      }
+    } catch (error) {
+        console.error('❌ Database connection failed:', error.message);
+        console.error('Connection URL format:', process.env.DATABASE_URL?.replace(/:[^:@]*@/, ':****@'));
+        return false;
     }
-    console.error('💥 All connection attempts failed');
-    return false;
-  };
+};
 
 module.exports = { pool, testConnection };
